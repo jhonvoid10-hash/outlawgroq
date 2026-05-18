@@ -342,42 +342,36 @@ def get_shot_from_ai(level, strategy, failed_attempts):
 def execute_shot(shot_data):
     sx, sy, ex, ey = shot_data['start_x'], shot_data['start_y'], shot_data['end_x'], shot_data['end_y']
 
-    # Hitung vektor arah dari bola ke target
+    # Hitung vektor arah dari bola ke target (target = arah tujuan bola)
     dx = ex - sx
     dy = ey - sy
 
-    # Normalisasi vektor agar punya panjang tetap (scale ke jarak maksimal)
     length = (dx**2 + dy**2) ** 0.5
     if length == 0:
         print("[-] Vektor arah nol, skip shot.")
         return None
 
-    # Anchor swipe di tengah bawah layar (area aman)
-    anchor_x = 360
-    anchor_y = 1500
-
-    # Skala swipe: makin panjang = makin kencang
-    # Pakai jarak 400px agar power selalu besar (kita gak perlu khawatir kekuatan)
-    SWIPE_LENGTH = 400
+    # Swipe mulai dari POSISI BOLA (sama seperti best_shot level 1)
+    # Semakin jauh jarak swipe = semakin besar power
+    # Pakai SWIPE_LENGTH besar agar power selalu maksimal
+    SWIPE_LENGTH = 600
     norm_dx = dx / length
     norm_dy = dy / length
 
-    # Swipe berlawanan arah target (karena game: swipe kiri = bola ke kanan)
-    swipe_start_x = int(anchor_x + norm_dx * SWIPE_LENGTH / 2)
-    swipe_start_y = int(anchor_y + norm_dy * SWIPE_LENGTH / 2)
-    swipe_end_x   = int(anchor_x - norm_dx * SWIPE_LENGTH / 2)
-    swipe_end_y   = int(anchor_y - norm_dy * SWIPE_LENGTH / 2)
+    swipe_start_x = sx
+    swipe_start_y = sy
+    # Swipe ke arah BERLAWANAN dari target (game mechanic: tarik mundur = tembak ke depan)
+    swipe_end_x = int(sx - norm_dx * SWIPE_LENGTH)
+    swipe_end_y = int(sy - norm_dy * SWIPE_LENGTH)
 
     # Clamp agar tidak keluar layar
-    swipe_start_x = max(10, min(710, swipe_start_x))
-    swipe_start_y = max(10, min(1590, swipe_start_y))
-    swipe_end_x   = max(10, min(710, swipe_end_x))
-    swipe_end_y   = max(10, min(1590, swipe_end_y))
+    swipe_end_x = max(10, min(710, swipe_end_x))
+    swipe_end_y = max(10, min(1590, swipe_end_y))
 
-    # Durasi swipe tetap singkat (100ms) — power ditentukan oleh JARAK swipe bukan durasi
-    SWIPE_DURATION_MS = 100
+    # duration_ms 1000ms sesuai best_shot level 1
+    SWIPE_DURATION_MS = 1000
 
-    print(f"[*] AI TARGET: ({ex},{ey}) | VEKTOR: ({dx:.0f},{dy:.0f}) | SWIPE: ({swipe_start_x},{swipe_start_y})->({swipe_end_x},{swipe_end_y})")
+    print(f"[*] AI TARGET: ({ex},{ey}) | SWIPE: ({swipe_start_x},{swipe_start_y})->({swipe_end_x},{swipe_end_y}) dur:{SWIPE_DURATION_MS}ms")
     adb(f"shell input swipe {swipe_start_x} {swipe_start_y} {swipe_end_x} {swipe_end_y} {SWIPE_DURATION_MS}")
     time.sleep(1)
 
