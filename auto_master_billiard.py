@@ -198,26 +198,13 @@ def execute_actions(level):
             adb(f"shell input tap {x} {y}")
 
 def execute_level1():
-    """Level 1 pakai actions dari data rekaman (sama seperti level lain)."""
-    actions = [
-        {"type": "swipe", "x1": 388, "y1": 1279, "x2": 445, "y2": 1265, "duration": 150,  "delay_before": 0.0},
-        {"type": "swipe", "x1": 554, "y1": 987,  "x2": 350, "y2": 1396, "duration": 500,  "delay_before": 0.5},
-        {"type": "tap",   "x":  479, "y":  1092,                          "delay_before": 2.0},
-    ]
-    print(f"[*] Eksekusi Level 1 (rekaman)...")
-    for i, action in enumerate(actions):
-        delay = action.get("delay_before", 0)
-        if delay > 0:
-            print(f"    [~] Delay {delay:.1f}s...")
-            time.sleep(delay)
-        if action["type"] == "swipe":
-            x1, y1, x2, y2, dur = action["x1"], action["y1"], action["x2"], action["y2"], action["duration"]
-            print(f"    [>] Swipe ({x1},{y1}) -> ({x2},{y2}) dur:{dur}ms")
-            adb(f"shell input swipe {x1} {y1} {x2} {y2} {dur}")
-        elif action["type"] == "tap":
-            x, y = action["x"], action["y"]
-            print(f"    [>] Tap ({x},{y})")
-            adb(f"shell input tap {x} {y}")
+    """Level 1 pakai best_shot file yang sudah terbukti berhasil."""
+    if not os.path.exists(LEVEL_1_SHOT_FILE):
+        print(f"[!] File {LEVEL_1_SHOT_FILE} tidak ditemukan!")
+        return False
+    shot = json.load(open(LEVEL_1_SHOT_FILE, 'r'))["adb_scaled_shot"]
+    print(f"[*] Eksekusi Level 1 (best_shot): ({shot['start_x']},{shot['start_y']}) -> ({shot['end_x']},{shot['end_y']}) {shot['duration_ms']}ms")
+    adb(f"shell input swipe {shot['start_x']} {shot['start_y']} {shot['end_x']} {shot['end_y']} {shot['duration_ms']}")
     return True
 
 def export_macrodroid():
