@@ -331,7 +331,9 @@ def get_shot_from_ai(level, strategy, failed_attempts):
 
 def execute_shot(shot_data):
     sx, sy, ex, ey, dur = shot_data['start_x'], shot_data['start_y'], shot_data['end_x'], shot_data['end_y'], shot_data['duration_ms']
-    adb_ex, adb_ey = (sx + (sx - ex), sy + (sy - ey)) if shot_data.get('reverse', False) else (ex, ey)
+    # Groq memberikan koordinat TARGET, tapi arah swipe ADB harus DIBALIK (swipe dari bola ke arah berlawanan target)
+    # Contoh: bola di (400,1300), target di (400,800) -> swipe dari (400,1300) ke (400,1800) agar bola gerak ke atas
+    adb_ex, adb_ey = (sx + (sx - ex), sy + (sy - ey))
 
     print(f"[*] AI MENGIRIM TEMBAKAN: Dari ({sx}, {sy}) ke arah ({adb_ex}, {adb_ey}) dengan power {dur}ms")
     adb(f"shell input swipe {sx} {sy} {adb_ex} {adb_ey} {dur}")
