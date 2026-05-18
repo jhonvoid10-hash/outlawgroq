@@ -3,12 +3,11 @@ import time
 import json
 import subprocess
 import datetime
+import base64
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw
-
-# MENGGUNAKAN MODUL LAMA YANG STABIL DI LAPTOPMU
-import google.generativeai as genai
+from groq import Groq
 
 # ==========================================
 # 1. KONFIGURASI UTAMA & BACA API KEY
@@ -16,18 +15,18 @@ import google.generativeai as genai
 try:
     with open("config.json", "r") as f:
         config_data = json.load(f)
-        GOOGLE_API_KEY = config_data.get("API_KEY", "")
+        GROQ_API_KEY = config_data.get("GROQ_API_KEY", "")
 except FileNotFoundError:
     print("[!] ERROR: File config.json tidak ditemukan!")
-    print("[!] Buat file config.json di folder ini dengan isi: {\"API_KEY\": \"kode_rahasia_kamu\"}")
+    print('[!] Buat file config.json dengan isi: {"GROQ_API_KEY": "gsk_xxxx"}')
     exit()
 
-if not GOOGLE_API_KEY or GOOGLE_API_KEY == "MASUKKAN_API_KEY_KAMU_DISINI":
-    print("[!] ERROR: API Key di config.json belum diganti dengan yang asli!")
+if not GROQ_API_KEY or GROQ_API_KEY == "MASUKKAN_GROQ_API_KEY_DISINI":
+    print("[!] ERROR: GROQ_API_KEY di config.json belum diisi!")
     exit()
 
-genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+client = Groq(api_key=GROQ_API_KEY)
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 TOTAL_LEVELS = 18
 DEVICE_RES = (720, 1600)
@@ -134,10 +133,10 @@ def wait_for_ui(label, timeout=15, do_tap=True):
                         print(f"[+] UI '{label}' muncul! Layar siap.")
                         return True
         else:
-            if check_ui_exists(label): 
+            if check_ui_exists(label):
                 return True
         time.sleep(1)
-        
+
     if do_tap: tap_button(label)
     return False
 
@@ -158,45 +157,76 @@ def drop_ball_fixed(level):
     x, y = DROP_COORDINATES.get(level, (360, 1300))
     print(f"[+] FIXED DROP LEVEL {level}: Melakukan TAP pas di koordinat bola (X:{x}, Y:{y})...")
     adb(f"shell input tap {x} {y}")
-    time.sleep(2) # Tunggu bola jatuh ke meja dan anteng sempurna
+    time.sleep(2)
     return x, y
 
+def encode_image_base64(image_path):
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
 def get_shot_from_ai(level, strategy, failed_attempts):
-    img_file = genai.upload_file(path=GRID_SCREENSHOT_PATH)
     failed_context = ""
     if failed_attempts:
-        failed_context = "JANGAN GUNAKAN target ini (sudah gagal):\n" + "\n".join([f"- X:{f['end_x']}, Y:{f['end_y']}" for f in failed_attempts])
-    
-    prompt = f"""
-    Screenshot game biliar 720x1600 bergaris grid 100px.
-    BOLA SUDAH BERADA DI ATAS MEJA.
-    LEVEL {level} STRATEGI: {strategy}
-    {failed_context}
-    
-    TUGAS:
-    1. Cari titik tengah bola asli di atas meja (start_x, start_y).
-    2. Tentukan target sasaran pantulan/lubang (end_x, end_y).
-    Output HANYA JSON: {{"start_x":int, "start_y":int, "end_x":int, "end_y":int, "duration_ms":int, "reverse":bool}}
-    """
+        failed_context = "JANGAN GUNAKAN target ini (sudah gagal):\n" + "\n".join(
+            [f"- X:{f['end_x']}, Y:{f['end_y']}" for f in failed_attempts]
+        )
+
+    prompt = f"""Screenshot game biliar 720x1600 bergaris grid 100px.
+BOLA SUDAH BERADA DI ATAS MEJA.
+LEVEL {level} STRATEGI: {strategy}
+{failed_context}
+
+TUGAS:
+1. Cari titik tengah bola asli di atas meja (start_x, start_y).
+2. Tentukan target sasaran pantulan/lubang (end_x, end_y).
+Output HANYA JSON tanpa penjelasan apapun:
+{{"start_x":int, "start_y":int, "end_x":int, "end_y":int, "duration_ms":int, "reverse":bool}}"""
+
     try:
-        response = model.generate_content([img_file, prompt])
-        return json.loads(response.text)
+        img_b64 = encode_image_base64(GRID_SCREENSHOT_PATH)
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{img_b64}"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            temperature=0.2,
+            max_tokens=256,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Bersihkan jika ada markdown code block
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        return json.loads(raw.strip())
     except Exception as e:
         print(f"[-] Error AI Shot: {e}")
         return None
-    finally:
-        genai.delete_file(img_file.name)
 
 def execute_shot(shot_data):
     sx, sy, ex, ey, dur = shot_data['start_x'], shot_data['start_y'], shot_data['end_x'], shot_data['end_y'], shot_data['duration_ms']
-    adb_ex, adb_ey = (sx + (sx - ex), sy + (sy - ex)) if shot_data.get('reverse', False) else (ex, ey)
-    
+    adb_ex, adb_ey = (sx + (sx - ex), sy + (sy - ey)) if shot_data.get('reverse', False) else (ex, ey)
+
     print(f"[*] AI MENGIRIM TEMBAKAN: Dari ({sx}, {sy}) ke arah ({adb_ex}, {adb_ey}) dengan power {dur}ms")
     adb(f"shell input swipe {sx} {sy} {adb_ex} {adb_ey} {dur}")
-    time.sleep(1) # JEDA SETELAH SWIPE TEMBAKAN
-    
-    return {"drop_x": shot_data.get('drop_x', sx), "drop_y": shot_data.get('drop_y', sy), 
-            "start_x": sx, "start_y": sy, "end_x": adb_ex, "end_y": adb_ey, 
+    time.sleep(1)
+
+    return {"drop_x": shot_data.get('drop_x', sx), "drop_y": shot_data.get('drop_y', sy),
+            "start_x": sx, "start_y": sy, "end_x": adb_ex, "end_y": adb_ey,
             "duration_ms": dur, "reverse": shot_data.get('reverse', False)}
 
 def log_failed(level, shot_data):
@@ -212,24 +242,24 @@ def save_best(level, ai_raw, adb_scaled):
 
 def recover_to_start():
     wait_for_ui("close", 5, do_tap=True)
-    wait_for_ui("yes", 5, do_tap=True) 
+    wait_for_ui("yes", 5, do_tap=True)
     time.sleep(4)
 
 def replay_to_level(target_level):
     wait_for_ui("play_solo", 10, do_tap=True)
-    
+
     print("[*] CEK & RICEK: Menunggu game loading masuk ke level 1...")
     wait_for_ui("close", timeout=20, do_tap=False)
     time.sleep(1)
-    
+
     for lvl in range(1, target_level):
         dx, dy = drop_ball_fixed(lvl)
         shot = json.load(open(f"level_{lvl:02d}_best_shot.json", 'r'))["adb_scaled_shot"]
-        
+
         print(f"[*] Replay otomatis Level {lvl} - Menembak...")
         adb(f"shell input swipe {shot['start_x']} {shot['start_y']} {shot['end_x']} {shot['end_y']} {shot['duration_ms']}")
         time.sleep(1)
-        
+
         wait_for_ui("continue", 15, do_tap=True)
         print(f"[*] CEK & RICEK: Menunggu Level {lvl+1} selesai loading...")
         wait_for_ui("close", timeout=20, do_tap=False)
@@ -241,7 +271,7 @@ def export_macrodroid():
         if not os.path.exists(f"level_{lvl:02d}_best_shot.json"): continue
         shot = json.load(open(f"level_{lvl:02d}_best_shot.json", 'r'))["adb_scaled_shot"]
         dx, dy = DROP_COORDINATES.get(lvl, (360, 1300))
-        
+
         macrodroid_txt.append(f"- Tap DROP BOLA FIXED (X:{dx}, Y:{dy})\n- Wait 2s")
         macrodroid_txt.append(f"- Swipe Lvl {lvl} (X:{shot['start_x']},Y:{shot['start_y']} -> X:{shot['end_x']},Y:{shot['end_y']})\n- Wait 1s\n- Wait CONTINUE")
         if lvl < TOTAL_LEVELS: macrodroid_txt.append(f"- Tap CONTINUE\n- Wait Next Level Ready")
@@ -251,44 +281,46 @@ def export_macrodroid():
 def main():
     current_level = 1
     wait_for_ui("play_solo", 10, do_tap=True)
-    
+
     print("[*] CEK & RICEK: Menunggu loading masuk ke level 1...")
     wait_for_ui("close", timeout=20, do_tap=False)
     time.sleep(1)
-    
+
     while current_level <= TOTAL_LEVELS:
-        # DROP BOLA DI AWAL LOOP LEVEL MENGGUNAKAN KOORDINAT ASLI DARI KAMU
         drop_x, drop_y = drop_ball_fixed(current_level)
-        
+
         best_file = f"level_{current_level:02d}_best_shot.json"
         if os.path.exists(best_file):
             shot = json.load(open(best_file, 'r'))["adb_scaled_shot"]
-            
+
             print(f"[*] Eksekusi Best Shot Jalan Tol Level {current_level}...")
             adb(f"shell input swipe {shot['start_x']} {shot['start_y']} {shot['end_x']} {shot['end_y']} {shot['duration_ms']}")
             time.sleep(1)
-            
+
             wait_for_ui("continue", 15, do_tap=True)
             print("[*] CEK & RICEK: Menunggu Level Berikutnya selesai loading...")
             wait_for_ui("close", timeout=20, do_tap=False)
             time.sleep(1)
             current_level += 1
             continue
-            
-        print(f"\n=== MENGANALISA TEMBAKAN LEVEL {current_level} DENGAN AI ===")
+
+        print(f"\n=== MENGANALISA TEMBAKAN LEVEL {current_level} DENGAN AI (GROQ) ===")
         print("[*] MENGAMBIL SCREENSHOT MEJA: Kondisi bola sudah mendarat anteng...")
-        capture_screen(SCREENSHOT_PATH); apply_grid_overlay(SCREENSHOT_PATH, GRID_SCREENSHOT_PATH)
+        capture_screen(SCREENSHOT_PATH)
+        apply_grid_overlay(SCREENSHOT_PATH, GRID_SCREENSHOT_PATH)
         fails = json.load(open(FAILED_LOG_FILE, 'r')).get(str(current_level), []) if os.path.exists(FAILED_LOG_FILE) else []
-        
+
         shot_plan = get_shot_from_ai(current_level, LEVEL_STRATEGY.get(current_level, ""), fails)
-        if not shot_plan: time.sleep(5); continue
-        
+        if not shot_plan:
+            time.sleep(5)
+            continue
+
         shot_plan['drop_x'] = drop_x
         shot_plan['drop_y'] = drop_y
-        
+
         adb_scaled = execute_shot(shot_plan)
         time.sleep(3)
-        
+
         if wait_for_ui("continue", 12, do_tap=True):
             save_best(current_level, shot_plan, adb_scaled)
             print("[*] CEK & RICEK: Menunggu Level Berikutnya selesai loading...")
@@ -296,8 +328,10 @@ def main():
             time.sleep(1)
             current_level += 1
         else:
-            log_failed(current_level, shot_plan); recover_to_start(); replay_to_level(current_level)
-            
+            log_failed(current_level, shot_plan)
+            recover_to_start()
+            replay_to_level(current_level)
+
     export_macrodroid()
 
 if __name__ == "__main__":
