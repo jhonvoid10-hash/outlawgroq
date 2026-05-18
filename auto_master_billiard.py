@@ -368,8 +368,8 @@ def execute_shot(shot_data):
     swipe_end_x = max(10, min(710, swipe_end_x))
     swipe_end_y = max(10, min(1590, swipe_end_y))
 
-    # duration_ms KECIL = power BESAR (makin cepat swipe = makin kencang tembakan)
-    SWIPE_DURATION_MS = 100
+    # duration_ms tetap 500ms, power ditentukan dari JARAK swipe (makin jauh makin kencang)
+    SWIPE_DURATION_MS = 500
 
     print(f"[*] AI TARGET: ({ex},{ey}) | SWIPE: ({swipe_start_x},{swipe_start_y})->({swipe_end_x},{swipe_end_y}) dur:{SWIPE_DURATION_MS}ms")
     adb(f"shell input swipe {swipe_start_x} {swipe_start_y} {swipe_end_x} {swipe_end_y} {SWIPE_DURATION_MS}")
