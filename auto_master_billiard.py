@@ -60,24 +60,106 @@ DROP_COORDINATES = {
 }
 
 LEVEL_STRATEGY = {
-    1: "Pantulan kanan (right wall bank). Jangan tembak lurus.",
-    2: "Cari celah pantulan, hindari area tengah.",
-    3: "Prioritas lane tengah ikuti up-arrow.",
-    4: "Jalur kiri/up-arrow kiri lebih aman.",
-    5: "Lewati area center/cyan lane.",
-    6: "Akurasi celah tengah lebih penting dari power.",
-    7: "Jalur aman lewat sisi kiri/atas ikuti kemiringan.",
-    8: "Cari pantulan ke arah kiri target.",
-    9: "Gunakan portal HANYA jika mengarah ke target.",
-    10: "Rute kiri/kanan, cek up-arrow mana yang aman.",
-    11: "Windmill di tengah, cari jalur sisi kiri.",
-    12: "Gunakan rute sisi kanan melewati penghalang.",
-    13: "Awas hole portal/trap. Arahkan ke flagged hole.",
-    14: "Gunakan jalur tengah ikuti arrow.",
-    15: "Power cukup besar lurus stabil di jalur vertikal.",
-    16: "Cari jalur kiri lewati obstacle vertikal.",
-    17: "Gunakan shot pendek/direct, koreksi arah kecil.",
-    18: "Bisa pakai bottom bank untuk lewat obstacle."
+    1: (
+        "Ada obstacle di tengah/jalur langsung. "
+        "Shot yang terbukti: pantulan kanan (right wall bank). "
+        "JANGAN tembak lurus ke obstacle. "
+        "Level 1 dipakai sebagai replay jalan tol, jangan ubah kalau best_shot sudah ada."
+    ),
+    2: (
+        "Ada beberapa obstacle/bar yang menghalangi jalur langsung. "
+        "JANGAN tembak lurus menabrak bar. "
+        "Cari jalur bank/pantulan yang melewati CELAH di antara bar. "
+        "Identifikasi ruang kosong di antara obstacle lalu arahkan bola lewat celah tersebut."
+    ),
+    3: (
+        "Jalur utama lewat area TENGAH. "
+        "Ada up-arrow/guide di tengah sebagai petunjuk arah. "
+        "Prioritas lintasan masuk melalui lane tengah, bukan menabrak sisi obstacle. "
+        "Kalau swipe normal kebalik hasilnya, gunakan reverse=true."
+    ),
+    4: (
+        "Ada jalur kiri / area up-arrow kiri yang lebih aman. "
+        "Hindari hole/trap bawah kanan kecuali itu portal yang menuju target. "
+        "Utamakan jalur yang memanfaatkan sisi kiri untuk menuju target."
+    ),
+    5: (
+        "Jalur relatif melalui lane tengah / cyan lane. "
+        "Cari shot yang melewati area center. "
+        "JANGAN terlalu melebar ke obstacle samping."
+    ),
+    6: (
+        "Layout seperti hourglass/gate sempit. "
+        "Shot HARUS melewati celah tengah yang sempit. "
+        "Akurasi arah lebih penting dari power. "
+        "Power boleh besar selama bola melewati hole/target tanpa menabrak tepi gate."
+    ),
+    7: (
+        "Ada koridor miring/slanted corridor. "
+        "Jalur aman lewat sisi kiri/atas atau mengikuti kemiringan obstacle. "
+        "JANGAN tembak lurus kalau jalurnya menabrak obstacle miring."
+    ),
+    8: (
+        "Target/jalur cenderung ke sisi KIRI. "
+        "Cari pantulan atau route yang mengarah ke kiri target. "
+        "Hindari terlalu kanan jika ada obstacle menghalangi."
+    ),
+    9: (
+        "Ada kemungkinan hole trap/portal. "
+        "JANGAN langsung anggap semua hole sebagai target. "
+        "Gunakan portal HANYA kalau keluarnya mengarah ke target asli. "
+        "Kalau portal tidak terbukti membantu, gunakan safe bridge/lane."
+    ),
+    10: (
+        "Ada dua kemungkinan rute: kiri dan kanan. "
+        "Cek up-arrow kiri atau kanan yang lebih aman. "
+        "Hindari jalur tengah kalau tertutup obstacle. "
+        "Boleh coba left route atau right route."
+    ),
+    11: (
+        "Ada obstacle bergerak/windmill di area tengah. HINDARI pusat obstacle. "
+        "Timing bisa berpengaruh jika obstacle bergerak. "
+        "Cari jalur sisi kiri/aman yang tidak menabrak bagian tengah windmill."
+    ),
+    12: (
+        "Ada obstacle/tembok tengah. "
+        "Jalur cenderung dari sisi KANAN. "
+        "Gunakan route kanan untuk melewati penghalang tengah lalu menuju target."
+    ),
+    13: (
+        "Target asli adalah hole yang berflag/tujuan akhir, bukan semua lubang. "
+        "Ada kemungkinan hole portal/trap. "
+        "Jika memakai portal simpan uses_portal=true. "
+        "Kalau tidak memakai portal, hindari hole trap dan arahkan ke flagged target."
+    ),
+    14: (
+        "Layout seperti funnel/center route. "
+        "Gunakan jalur TENGAH mengikuti arrow/funnel. "
+        "JANGAN terlalu menyamping karena bisa mentok obstacle."
+    ),
+    15: (
+        "Ada jalur vertikal/center shaft. "
+        "Shot perlu power CUKUP BESAR melalui jalur tengah. "
+        "Arah harus lurus/stabil agar tidak menyentuh dinding shaft."
+    ),
+    16: (
+        "Jalur target cenderung sisi KIRI. "
+        "Ada stack/obstacle vertikal yang harus dihindari. "
+        "Cari jalur kiri yang melewati obstacle, bukan tembak langsung ke stack."
+    ),
+    17: (
+        "Target relatif dekat / short route. "
+        "JANGAN overcomplicate. "
+        "Gunakan shot pendek/direct jika memungkinkan. "
+        "Kalau ada obstacle kecil, koreksi arah sedikit saja."
+    ),
+    18: (
+        "Target akhir cenderung bawah/kiri atau perlu route bawah. "
+        "Ada kemungkinan portal/trap sisi kanan. "
+        "JANGAN langsung masuk portal kecuali jelas membantu menuju target. "
+        "Bisa pakai bottom bank/pantulan bawah untuk melewati obstacle. "
+        "Setelah Level 18 cukup simpan best_shot saja."
+    ),
 }
 
 def adb(cmd):
@@ -167,26 +249,50 @@ def encode_image_base64(image_path):
 def get_shot_from_ai(level, strategy, failed_attempts):
     failed_context = ""
     if failed_attempts:
-        failed_context = "JANGAN GUNAKAN target ini (sudah gagal):\n" + "\n".join(
-            [f"- X:{f['end_x']}, Y:{f['end_y']}" for f in failed_attempts]
+        failed_context = (
+            "PERCOBAAN GAGAL SEBELUMNYA - JANGAN gunakan koordinat end ini lagi:\n"
+            + "\n".join([f"  - end_x:{f['end_x']}, end_y:{f['end_y']}" for f in failed_attempts])
+            + "\nPilih arah yang BERBEDA dari daftar di atas.\n"
         )
 
-    prompt = f"""Screenshot game biliar 720x1600 bergaris grid 100px.
-BOLA SUDAH BERADA DI ATAS MEJA.
-LEVEL {level} STRATEGI: {strategy}
-{failed_context}
+    system_prompt = (
+        "Kamu adalah AI analis game biliar. "
+        "Tugasmu HANYA menganalisis screenshot dan memberikan koordinat tembakan yang TIDAK menabrak obstacle. "
+        "ATURAN WAJIB:\n"
+        "1. IDENTIFIKASI semua obstacle/bar/penghalang di layar terlebih dahulu.\n"
+        "2. PASTIKAN lintasan dari start ke end TIDAK melewati obstacle apapun.\n"
+        "3. Cari CELAH atau jalur kosong yang bisa dilalui bola.\n"
+        "4. end_x/end_y adalah titik TUJUAN/TARGET/LUBANG, bukan obstacle.\n"
+        "5. Jika jalur lurus terblokir, gunakan pantulan dinding (bank shot).\n"
+        "6. Output HANYA JSON murni, tanpa teks, komentar, atau markdown apapun."
+    )
 
-TUGAS:
-1. Cari titik tengah bola asli di atas meja (start_x, start_y).
-2. Tentukan target sasaran pantulan/lubang (end_x, end_y).
-Output HANYA JSON tanpa penjelasan apapun:
-{{"start_x":int, "start_y":int, "end_x":int, "end_y":int, "duration_ms":int, "reverse":bool}}"""
+    user_prompt = (
+        f"Ini screenshot game biliar 720x1600 dengan overlay grid 100px.\n"
+        f"Bola sudah ada di atas meja (jangan drop lagi).\n\n"
+        f"=== LEVEL {level} ===\n"
+        f"PANDUAN STRATEGI: {strategy}\n\n"
+        f"{failed_context}"
+        f"LANGKAH ANALISIS:\n"
+        f"1. Temukan posisi tengah BOLA di meja -> (start_x, start_y)\n"
+        f"2. Identifikasi semua OBSTACLE (bar/dinding/penghalang) - JANGAN jadikan ini target\n"
+        f"3. Temukan LUBANG/HOLE TARGET atau CELAH yang kosong -> (end_x, end_y)\n"
+        f"4. Pastikan garis dari start ke end TIDAK melewati obstacle\n"
+        f"5. Tentukan duration_ms (power): 300-800ms untuk shot normal\n"
+        f"6. reverse=true jika arah swipe perlu dibalik (swipe berlawanan arah tembakan)\n\n"
+        f"Output HANYA JSON ini:\n"
+        f'{{ "start_x": int, "start_y": int, "end_x": int, "end_y": int, "duration_ms": int, "reverse": bool }}'
+    )
 
     try:
         img_b64 = encode_image_base64(GRID_SCREENSHOT_PATH)
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
                 {
                     "role": "user",
                     "content": [
@@ -198,20 +304,26 @@ Output HANYA JSON tanpa penjelasan apapun:
                         },
                         {
                             "type": "text",
-                            "text": prompt
+                            "text": user_prompt
                         }
                     ]
                 }
             ],
-            temperature=0.2,
-            max_tokens=256,
+            temperature=0.1,
+            max_tokens=300,
         )
         raw = response.choices[0].message.content.strip()
+        print(f"[AI RAW RESPONSE] {raw}")
         # Bersihkan jika ada markdown code block
-        if raw.startswith("```"):
+        if "```" in raw:
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
+        # Ambil hanya bagian JSON { ... }
+        start_idx = raw.find("{")
+        end_idx = raw.rfind("}") + 1
+        if start_idx != -1 and end_idx > start_idx:
+            raw = raw[start_idx:end_idx]
         return json.loads(raw.strip())
     except Exception as e:
         print(f"[-] Error AI Shot: {e}")
