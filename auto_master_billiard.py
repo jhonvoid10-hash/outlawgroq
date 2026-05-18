@@ -331,17 +331,36 @@ def get_shot_from_ai(level, strategy, failed_attempts):
 
 def execute_shot(shot_data):
     sx, sy, ex, ey, dur = shot_data['start_x'], shot_data['start_y'], shot_data['end_x'], shot_data['end_y'], shot_data['duration_ms']
-    # Groq memberikan koordinat TARGET, tapi arah swipe ADB harus DIBALIK (swipe dari bola ke arah berlawanan target)
-    # Contoh: bola di (400,1300), target di (400,800) -> swipe dari (400,1300) ke (400,1800) agar bola gerak ke atas
-    adb_ex, adb_ey = (sx + (sx - ex), sy + (sy - ey))
 
-    print(f"[*] AI MENGIRIM TEMBAKAN: Dari ({sx}, {sy}) ke arah ({adb_ex}, {adb_ey}) dengan power {dur}ms")
-    adb(f"shell input swipe {sx} {sy} {adb_ex} {adb_ey} {dur}")
+    # Swipe TIDAK harus mulai dari posisi bola, yang penting ARAH (vektor) nya sama.
+    # Kita pakai titik aman di area bawah layar sebagai anchor swipe.
+    # Hitung vektor arah dari AI: dx = ex - sx, dy = ey - sy
+    # Lalu balik arah (reverse) karena Groq kasih TARGET, kita perlu swipe berlawanan.
+    dx = ex - sx  # arah x menuju target
+    dy = ey - sy  # arah y menuju target
+
+    # Titik anchor swipe yang aman (area bawah layar, bebas obstacle)
+    anchor_x = 360
+    anchor_y = 1500
+
+    # Swipe dari anchor ke arah BERLAWANAN dari target (reverse)
+    swipe_start_x = anchor_x
+    swipe_start_y = anchor_y
+    swipe_end_x = anchor_x - dx
+    swipe_end_y = anchor_y - dy
+
+    # Clamp agar tidak keluar layar
+    swipe_end_x = max(10, min(710, swipe_end_x))
+    swipe_end_y = max(10, min(1590, swipe_end_y))
+
+    print(f"[*] AI TARGET: ({ex}, {ey}) | SWIPE: ({swipe_start_x},{swipe_start_y}) -> ({swipe_end_x},{swipe_end_y}) | power {dur}ms")
+    adb(f"shell input swipe {swipe_start_x} {swipe_start_y} {swipe_end_x} {swipe_end_y} {dur}")
     time.sleep(1)
 
     return {"drop_x": shot_data.get('drop_x', sx), "drop_y": shot_data.get('drop_y', sy),
-            "start_x": sx, "start_y": sy, "end_x": adb_ex, "end_y": adb_ey,
-            "duration_ms": dur, "reverse": shot_data.get('reverse', False)}
+            "start_x": swipe_start_x, "start_y": swipe_start_y,
+            "end_x": swipe_end_x, "end_y": swipe_end_y,
+            "duration_ms": dur, "reverse": False}
 
 def log_failed(level, shot_data):
     fails = json.load(open(FAILED_LOG_FILE, 'r')) if os.path.exists(FAILED_LOG_FILE) else {}

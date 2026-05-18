@@ -3,13 +3,13 @@
   "adb_scaled_shot": {
     "drop_x": 400,
     "drop_y": 1288,
-    "start_x": 400,
-    "start_y": 1288,
-    "end_x": 710,
-    "end_y": 1576,
+    "start_x": 360,
+    "start_y": 1500,
+    "end_x": 610,
+    "end_y": 1500,
     "duration_ms": 700,
     "reverse": false
   },
-  "note": "Manual: pantul dinding kiri lalu kanan masuk hole. end_x/end_y sudah final ADB (sudah reverse dari arah gerak bola ke kiri-atas).",
+  "note": "Manual: swipe kanan ke kiri (bola gerak ke kiri, pantul dinding kiri, lalu masuk hole kanan atas). start/end adalah koordinat swipe langsung (sudah final ADB).",
   "saved_at": "2026-05-18T00:00:00"
 }
