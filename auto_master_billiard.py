@@ -278,10 +278,10 @@ def get_shot_from_ai(level, strategy, failed_attempts):
         f"2. Identifikasi semua OBSTACLE (bar/dinding/penghalang) - JANGAN jadikan ini target\n"
         f"3. Temukan LUBANG/HOLE TARGET atau CELAH yang kosong -> (end_x, end_y)\n"
         f"4. Pastikan garis dari start ke end TIDAK melewati obstacle\n"
-        f"5. Tentukan duration_ms (power): 300-800ms untuk shot normal\n"
-        f"6. reverse=true jika arah swipe perlu dibalik (swipe berlawanan arah tembakan)\n\n"
-        f"Output HANYA JSON ini:\n"
-        f'{{ "start_x": int, "start_y": int, "end_x": int, "end_y": int, "duration_ms": int, "reverse": bool }}'
+        f"5. POWER otomatis maksimal, jangan khawatir soal kecepatan.\n"
+        f"   Kamu cukup tentukan ARAH yang tepat saja.\n\n"
+        f"Output HANYA JSON ini (tanpa duration_ms):\n"
+        f'{{ "start_x": int, "start_y": int, "end_x": int, "end_y": int }}'
     )
 
     try:
@@ -325,42 +325,66 @@ def get_shot_from_ai(level, strategy, failed_attempts):
         if start_idx != -1 and end_idx > start_idx:
             raw = raw[start_idx:end_idx]
         return json.loads(raw.strip())
+    except json.JSONDecodeError:
+        # Fallback: paksa default duration kalau key hilang
+        try:
+            parsed = json.loads(raw.strip())
+            parsed.setdefault("duration_ms", 500)
+            parsed.setdefault("reverse", False)
+            return parsed
+        except Exception as e2:
+            print(f"[-] Error parse JSON: {e2}")
+            return None
     except Exception as e:
         print(f"[-] Error AI Shot: {e}")
         return None
 
 def execute_shot(shot_data):
-    sx, sy, ex, ey, dur = shot_data['start_x'], shot_data['start_y'], shot_data['end_x'], shot_data['end_y'], shot_data['duration_ms']
+    sx, sy, ex, ey = shot_data['start_x'], shot_data['start_y'], shot_data['end_x'], shot_data['end_y']
 
-    # Swipe TIDAK harus mulai dari posisi bola, yang penting ARAH (vektor) nya sama.
-    # Kita pakai titik aman di area bawah layar sebagai anchor swipe.
-    # Hitung vektor arah dari AI: dx = ex - sx, dy = ey - sy
-    # Lalu balik arah (reverse) karena Groq kasih TARGET, kita perlu swipe berlawanan.
-    dx = ex - sx  # arah x menuju target
-    dy = ey - sy  # arah y menuju target
+    # Hitung vektor arah dari bola ke target
+    dx = ex - sx
+    dy = ey - sy
 
-    # Titik anchor swipe yang aman (area bawah layar, bebas obstacle)
+    # Normalisasi vektor agar punya panjang tetap (scale ke jarak maksimal)
+    length = (dx**2 + dy**2) ** 0.5
+    if length == 0:
+        print("[-] Vektor arah nol, skip shot.")
+        return None
+
+    # Anchor swipe di tengah bawah layar (area aman)
     anchor_x = 360
     anchor_y = 1500
 
-    # Swipe dari anchor ke arah BERLAWANAN dari target (reverse)
-    swipe_start_x = anchor_x
-    swipe_start_y = anchor_y
-    swipe_end_x = anchor_x - dx
-    swipe_end_y = anchor_y - dy
+    # Skala swipe: makin panjang = makin kencang
+    # Pakai jarak 400px agar power selalu besar (kita gak perlu khawatir kekuatan)
+    SWIPE_LENGTH = 400
+    norm_dx = dx / length
+    norm_dy = dy / length
+
+    # Swipe berlawanan arah target (karena game: swipe kiri = bola ke kanan)
+    swipe_start_x = int(anchor_x + norm_dx * SWIPE_LENGTH / 2)
+    swipe_start_y = int(anchor_y + norm_dy * SWIPE_LENGTH / 2)
+    swipe_end_x   = int(anchor_x - norm_dx * SWIPE_LENGTH / 2)
+    swipe_end_y   = int(anchor_y - norm_dy * SWIPE_LENGTH / 2)
 
     # Clamp agar tidak keluar layar
-    swipe_end_x = max(10, min(710, swipe_end_x))
-    swipe_end_y = max(10, min(1590, swipe_end_y))
+    swipe_start_x = max(10, min(710, swipe_start_x))
+    swipe_start_y = max(10, min(1590, swipe_start_y))
+    swipe_end_x   = max(10, min(710, swipe_end_x))
+    swipe_end_y   = max(10, min(1590, swipe_end_y))
 
-    print(f"[*] AI TARGET: ({ex}, {ey}) | SWIPE: ({swipe_start_x},{swipe_start_y}) -> ({swipe_end_x},{swipe_end_y}) | power {dur}ms")
-    adb(f"shell input swipe {swipe_start_x} {swipe_start_y} {swipe_end_x} {swipe_end_y} {dur}")
+    # Durasi swipe tetap singkat (100ms) — power ditentukan oleh JARAK swipe bukan durasi
+    SWIPE_DURATION_MS = 100
+
+    print(f"[*] AI TARGET: ({ex},{ey}) | VEKTOR: ({dx:.0f},{dy:.0f}) | SWIPE: ({swipe_start_x},{swipe_start_y})->({swipe_end_x},{swipe_end_y})")
+    adb(f"shell input swipe {swipe_start_x} {swipe_start_y} {swipe_end_x} {swipe_end_y} {SWIPE_DURATION_MS}")
     time.sleep(1)
 
     return {"drop_x": shot_data.get('drop_x', sx), "drop_y": shot_data.get('drop_y', sy),
             "start_x": swipe_start_x, "start_y": swipe_start_y,
             "end_x": swipe_end_x, "end_y": swipe_end_y,
-            "duration_ms": dur, "reverse": False}
+            "duration_ms": SWIPE_DURATION_MS, "reverse": False}
 
 def log_failed(level, shot_data):
     fails = json.load(open(FAILED_LOG_FILE, 'r')) if os.path.exists(FAILED_LOG_FILE) else {}
